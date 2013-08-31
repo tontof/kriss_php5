@@ -23,7 +23,7 @@
  * - Replace globals with variables in Session class
  *
  * How to use:
- * - http://tontof.net/kriss/php5#session
+ * - http://tontof.net/kriss/php5/session
  */
 class Session
 {
@@ -198,19 +198,21 @@ class Session
      */
     public static function banLoginFailed()
     {
-        $ip = $_SERVER["REMOTE_ADDR"];
-        $gb = $GLOBALS['IPBANS'];
-
-        if (!isset($gb['FAILURES'][$ip])) {
-            $gb['FAILURES'][$ip] = 0;
+        if (self::$banFile !== '') {
+            $ip = $_SERVER["REMOTE_ADDR"];
+            $gb = $GLOBALS['IPBANS'];
+            
+            if (!isset($gb['FAILURES'][$ip])) {
+                $gb['FAILURES'][$ip] = 0;
+            }
+            $gb['FAILURES'][$ip]++;
+            if ($gb['FAILURES'][$ip] > (self::$banAfter - 1)) {
+                $gb['BANS'][$ip]= time() + self::$banDuration;
+            }
+            
+            $GLOBALS['IPBANS'] = $gb;
+            file_put_contents(self::$banFile, "<?php\n\$GLOBALS['IPBANS']=".var_export($gb, true).";\n?>");
         }
-        $gb['FAILURES'][$ip]++;
-        if ($gb['FAILURES'][$ip] > (self::$banAfter - 1)) {
-            $gb['BANS'][$ip]= time() + self::$banDuration;
-        }
-
-        $GLOBALS['IPBANS'] = $gb;
-        file_put_contents(self::$banFile, "<?php\n\$GLOBALS['IPBANS']=".var_export($gb, true).";\n?>");
     }
 
     /**
@@ -218,11 +220,13 @@ class Session
      */
     public static function banLoginOk()
     {
-        $ip = $_SERVER["REMOTE_ADDR"];
-        $gb = $GLOBALS['IPBANS'];
-        unset($gb['FAILURES'][$ip]); unset($gb['BANS'][$ip]);
-        $GLOBALS['IPBANS'] = $gb;
-        file_put_contents(self::$banFile, "<?php\n\$GLOBALS['IPBANS']=".var_export($gb, true).";\n?>");
+        if (self::$banFile !== '') {
+            $ip = $_SERVER["REMOTE_ADDR"];
+            $gb = $GLOBALS['IPBANS'];
+            unset($gb['FAILURES'][$ip]); unset($gb['BANS'][$ip]);
+            $GLOBALS['IPBANS'] = $gb;
+            file_put_contents(self::$banFile, "<?php\n\$GLOBALS['IPBANS']=".var_export($gb, true).";\n?>");
+        }
     }
 
     /**
@@ -230,10 +234,10 @@ class Session
      */
     public static function banInit()
     {
-        if (!is_file(self::$banFile) && self::$banFile !== '') {
-            file_put_contents(self::$banFile, "<?php\n\$GLOBALS['IPBANS']=".var_export(array('FAILURES'=>array(), 'BANS'=>array()), true).";\n?>");
-        }
         if (self::$banFile !== '') {
+            if (!is_file(self::$banFile)) {
+                file_put_contents(self::$banFile, "<?php\n\$GLOBALS['IPBANS']=".var_export(array('FAILURES'=>array(), 'BANS'=>array()), true).";\n?>");
+            }
             include self::$banFile;
         }
     }
@@ -245,20 +249,22 @@ class Session
      */
     public static function banCanLogin()
     {
-        $ip = $_SERVER["REMOTE_ADDR"];
-        $gb = $GLOBALS['IPBANS'];
-        if (isset($gb['BANS'][$ip])) {
-            // User is banned. Check if the ban has expired:
-            if ($gb['BANS'][$ip] <= time()) {
-                // Ban expired, user can try to login again.
-                unset($gb['FAILURES'][$ip]);
-                unset($gb['BANS'][$ip]);
-                file_put_contents(self::$banFile, "<?php\n\$GLOBALS['IPBANS']=".var_export($gb, true).";\n?>");
-
-                return true; // Ban has expired, user can login.
+        if (self::$banFile !== '') {
+            $ip = $_SERVER["REMOTE_ADDR"];
+            $gb = $GLOBALS['IPBANS'];
+            if (isset($gb['BANS'][$ip])) {
+                // User is banned. Check if the ban has expired:
+                if ($gb['BANS'][$ip] <= time()) {
+                    // Ban expired, user can try to login again.
+                    unset($gb['FAILURES'][$ip]);
+                    unset($gb['BANS'][$ip]);
+                    file_put_contents(self::$banFile, "<?php\n\$GLOBALS['IPBANS']=".var_export($gb, true).";\n?>");
+                    
+                    return true; // Ban has expired, user can login.
+                }
+                
+                return false; // User is banned.
             }
-
-            return false; // User is banned.
         }
 
         return true; // User is not banned.
